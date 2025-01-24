@@ -96,23 +96,51 @@ LEFT JOIN clients as cl ON (t.person_name = cl.name AND t.phone = cl.phone);
 -- Этап 2. Создание выборок
 
 ---- Задание 1. Напишите запрос, который выведет процент моделей машин, у которых нет параметра `gasoline_consumption`.
-
+SELECT 
+    (COUNT(*) FILTER (WHERE gasoline_consumption IS NULL) * 100 / COUNT(*)) as nulls_percentage_gasoline_consumption
+FROM models;    
 
 
 ---- Задание 2. Напишите запрос, который покажет название бренда и среднюю цену его автомобилей в разбивке по всем годам с учётом скидки.
-
+SELECT 
+    SPLIT_PART(m.model_name, ' ', 1) as brand_name,
+    EXTRACT('year' FROM s.sale_date) as year,
+    AVG(s.price) :: numeric(7,2) as price_avg
+FROM sales as s
+LEFT JOIN models as m ON s.car_id = m.id
+GROUP BY 1, 2
+ORDER BY 1, 2;
 
 
 ---- Задание 3. Посчитайте среднюю цену всех автомобилей с разбивкой по месяцам в 2022 году с учётом скидки.
-
+SELECT 
+    EXTRACT('month' FROM s.sale_date) as month,
+    EXTRACT('year' FROM s.sale_date) as year,
+    AVG(s.price) :: numeric(7,2)
+FROM sales as s
+LEFT JOIN models as m ON s.car_id = m.id
+GROUP BY 1, 2
+HAVING EXTRACT('year' FROM s.sale_date) = '2022'
+ORDER BY 1, 2;
 
 
 ---- Задание 4. Напишите запрос, который выведет список купленных машин у каждого пользователя.
-
+SELECT
+    o.origin_name as brand_origin,
+    max((s.price /(100-s.discount))*100):: numeric(7,2) as price_max,
+    min((s.price /(100-s.discount))*100):: numeric(7,2) as price_min
+FROM sales as s
+LEFT JOIN models as m ON s.car_id = m.id
+LEFT JOIN origins as o ON o.id = m.origin_id
+WHERE  o.origin_name IS NOT NULL -- У порше стоит NULL, не знаю стоит ли их относить на этапе сборке данных к какой то стране
+GROUP BY 1;
 
 
 ---- Задание 5. Напишите запрос, который покажет количество всех пользователей из США.
 
-
+SELECT
+    COUNT(*) as persons_from_usa_count
+FROM clients
+WHERE phone like '+1%';
 
 
