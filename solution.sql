@@ -65,7 +65,7 @@ SELECT DISTINCT brand_origin
 FROM raw_data.sales
 WHERE brand_origin IS NOT NULL;
 
-
+--DISTINCT trim(substr(SPLIT_PART(t.auto, ', ', 1), position(' ' IN SPLIT_PART(t.auto, ', ', 1)) + 1)) так можно вытащить название модели
 
 INSERT INTO car_shop.clients(name, phone)
 SELECT DISTINCT person_name, phone
