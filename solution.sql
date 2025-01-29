@@ -16,9 +16,10 @@ brand_origin VARCHAR
 --\copy raw_data.sales(id,auto,gasoline_consumption,price,date,person_name,phone,discount,brand_origin) FROM 'C:\Temp\cars.csv' CSV HEADER;
 create schema IF NOT EXISTS car_shop;
 
--- Эта часть кода нужна, чтоб полноценно удалились и потом создались таблички ниже, при выполнении всего скрипта целиков
+-- Эта часть кода нужна, чтоб полноценно создались таблички ниже
 DROP TABLE IF EXISTS car_shop.origins CASCADE;
 DROP TABLE IF EXISTS car_shop.clients CASCADE;
+DROP TABLE IF EXISTS car_shop.brands CASCADE;
 DROP TABLE IF EXISTS car_shop.colors CASCADE;
 DROP TABLE IF EXISTS car_shop.models CASCADE;
 DROP TABLE IF EXISTS car_shop.sales CASCADE;
@@ -36,6 +37,11 @@ CREATE TABLE car_shop.clients(
     CONSTRAINT name_phone_unique unique (name, phone) -- пара имя и телефон = уникальный клиент
 );
 
+CREATE TABLE car_shop.brands(
+    id SERIAL PRIMARY KEY,
+    brand_name VARCHAR NOT NULL unique -- текст, т.к. имя бренда
+    );
+
 CREATE TABLE car_shop.colors(
     id SERIAL PRIMARY KEY,
     color_name VARCHAR NOT NULL unique -- не может быть пустой, название цвета = текст
@@ -45,7 +51,8 @@ CREATE TABLE car_shop.colors(
 CREATE TABLE car_shop.models(
     id SERIAL PRIMARY KEY,
     model_name VARCHAR NOT null UNIQUE, -- наименование модели, уникальное, не пустое
-    origin_id INTEGER REFERENCES car_shop.origins, -- зависимость от "словаря" стран
+    brand_id INTEGER REFERENCES car_shop.brands,  -- зависимость от "словаря" стран
+    origin_id INTEGER REFERENCES car_shop.origins, -- зависимость от "словаря" брендов
     gasoline_consumption numeric(3,1) -- потребление переводим в нумерик
 );
 
@@ -65,13 +72,15 @@ SELECT DISTINCT brand_origin
 FROM raw_data.sales
 WHERE brand_origin IS NOT NULL;
 
---DISTINCT trim(substr(SPLIT_PART(t.auto, ', ', 1), position(' ' IN SPLIT_PART(t.auto, ', ', 1)) + 1)) так можно вытащить название модели
+
 
 INSERT INTO car_shop.clients(name, phone)
 SELECT DISTINCT person_name, phone
 FROM raw_data.sales;
 
-
+INSERT INTO car_shop.brands(brand_name)
+SELECT DISTINCT SPLIT_PART(auto, ' ', 1)
+FROM raw_data.sales;
 
 INSERT INTO car_shop.colors (color_name)
 SELECT DISTINCT SPLIT_PART(auto, ', ', 2)
@@ -79,14 +88,16 @@ FROM raw_data.sales;
 
 
 
-INSERT INTO car_shop.models(model_name, origin_id, gasoline_consumption)
-SELECT DISTINCT SPLIT_PART(t.auto, ', ', 1),
+INSERT INTO car_shop.models(model_name, brand_id, origin_id, gasoline_consumption)
+SELECT DISTINCT trim(substr(SPLIT_PART(t.auto, ', ', 1), position(' ' IN SPLIT_PART(t.auto, ', ', 1)) + 1)), -- получаем название модели
+	b.id,
     o.id,
     case when t.gasoline_consumption = 'null' then null -- в таблице raw_data.sales, тип var поэтому null-текст надо преобразовать
     else t.gasoline_consumption
     end :: numeric(3,1)
 FROM raw_data.sales as t
-LEFT JOIN car_shop.origins as o ON o.origin_name = t.brand_origin;
+LEFT JOIN car_shop.origins as o ON o.origin_name = t.brand_origin
+left join car_shop.brands as b on b.brand_name = SPLIT_PART(t.auto, ' ', 1);
 
 
 
@@ -100,7 +111,7 @@ SELECT
     cl.id as client_id,
     t.discount  :: integer
 FROM raw_data.sales as t
-LEFT JOIN car_shop.models as m ON SPLIT_PART(t.auto, ', ', 1) = m.model_name
+LEFT JOIN car_shop.models as m ON trim(substr(SPLIT_PART(t.auto, ', ', 1), position(' ' IN SPLIT_PART(t.auto, ', ', 1)) + 1)) = m.model_name
 LEFT JOIN car_shop.colors as col ON SPLIT_PART(t.auto, ', ', 2) = col.color_name
 LEFT JOIN car_shop.clients as cl ON (t.person_name = cl.name AND t.phone = cl.phone);
 
@@ -118,11 +129,12 @@ FROM car_shop.models;
 
 ---- Задание 2. Напишите запрос, который покажет название бренда и среднюю цену его автомобилей в разбивке по всем годам с учётом скидки.
 SELECT 
-    SPLIT_PART(m.model_name, ' ', 1) as brand_name,
+    b.brand_name as brand_name,
     EXTRACT('year' FROM s.sale_date) as year,
     AVG(s.price) :: numeric(7,2) as price_avg
 FROM car_shop.sales as s
 LEFT JOIN car_shop.models as m ON s.car_id = m.id
+left join car_shop.brands as b on b.id = m.brand_id
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
@@ -147,7 +159,7 @@ SELECT
 FROM car_shop.sales as s
 LEFT JOIN car_shop.models as m ON s.car_id = m.id
 LEFT JOIN car_shop.origins as o ON o.id = m.origin_id
-WHERE  o.origin_name IS NOT NULL -- У порше стоит NULL, не знаю стоит, ли их относить на этапе сборке данных к какой то стране. Тут я их исключил.
+WHERE  o.origin_name != 'null' -- У порше стоит NULL, не знаю стоит, ли их относить на этапе сборке данных к какой то стране. Тут я их исключил.
 GROUP BY 1;
 
 
